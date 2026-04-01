@@ -10,8 +10,19 @@ st.set_page_config(
 )
 
 # Load models
+# risk_model = joblib.load("risk_model.pkl")
+# soh_model = joblib.load("soh_model.pkl")
+
+import xgboost as xgb
+import joblib
+
 risk_model = joblib.load("risk_model.pkl")
 soh_model = joblib.load("soh_model.pkl")
+
+# Fix for XGBoost compatibility
+if hasattr(soh_model, "get_booster"):
+    soh_model.get_booster()
+
 
 # Title
 st.markdown("<h1 style='text-align: center;'>🔋 Battery Thermal Management Dashboard</h1>", unsafe_allow_html=True)
@@ -31,7 +42,9 @@ heat = current**2 * 0.015
 
 features = np.array([[voltage,current,power,heat,ambient]])
 
-soh = soh_model.predict([[voltage,current,power,heat,ambient,cycle]])
+# soh = soh_model.predict([[voltage,current,power,heat,ambient,cycle]])
+features = [[voltage,current,power,heat,ambient,cycle]]
+soh = soh_model.predict(features)
 
 temp_pred = voltage*10 + current*2 + ambient*0.1
 
