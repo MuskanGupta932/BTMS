@@ -3,6 +3,4 @@ joblib
 numpy
 pandas
 scikit-learn
-xgboost
-tensorflow
-h5py
+xgboost==1.7.6
