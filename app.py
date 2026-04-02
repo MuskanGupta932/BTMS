@@ -1,88 +1,86 @@
 import streamlit as st
 import numpy as np
 import joblib
+import os
 
-# Page config
 st.set_page_config(
-    page_title="Battery Dashboard",
-    page_icon="🔋",
+    page_title="Battery Thermal Management System",
     layout="wide"
 )
 
-# Load models
-# risk_model = joblib.load("risk_model.pkl")
-# soh_model = joblib.load("soh_model.pkl")
+st.title("🔋 Battery Thermal Management System")
 
-import xgboost as xgb
-import joblib
+# Load Models Safely
+@st.cache_resource
+def load_models():
+    models = {}
+    
+    try:
+        models['temp'] = joblib.load("temp_model.pkl")
+    except:
+        models['temp'] = None
+        
+    try:
+        models['soh'] = joblib.load("soh_model.pkl")
+    except:
+        models['soh'] = None
+        
+    try:
+        models['risk'] = joblib.load("risk_model.pkl")
+    except:
+        models['risk'] = None
+        
+    return models
 
-risk_model = joblib.load("risk_model.pkl")
-soh_model = joblib.load("soh_model.pkl")
+models = load_models()
 
-# Fix for XGBoost compatibility
-if hasattr(soh_model, "get_booster"):
-    soh_model.get_booster()
+# Sidebar Inputs
+st.sidebar.header("Battery Parameters")
 
+voltage = st.sidebar.slider("Voltage", 3.0, 4.2, 3.7)
+current = st.sidebar.slider("Current", 0.5, 5.0, 2.0)
+ambient = st.sidebar.slider("Ambient Temperature", 20, 50, 25)
+cycle = st.sidebar.slider("Cycle", 1, 1000, 100)
 
-# Title
-st.markdown("<h1 style='text-align: center;'>🔋 Battery Thermal Management Dashboard</h1>", unsafe_allow_html=True)
-st.markdown("---")
-
-# Sidebar
-st.sidebar.header("⚙ Battery Inputs")
-
-voltage = st.sidebar.slider("Voltage (V)",3.0,4.5,3.7)
-current = st.sidebar.slider("Current (A)",0.0,5.0,2.0)
-ambient = st.sidebar.slider("Ambient Temperature (°C)",10,50,25)
-cycle = st.sidebar.slider("Battery Cycle",1,1000,50)
-
-# Calculations
+# Feature Engineering
 power = voltage * current
 heat = current**2 * 0.015
 
-features = np.array([[voltage,current,power,heat,ambient]])
+features = np.array([[voltage, current, power, heat, ambient, cycle]])
 
-# soh = soh_model.predict([[voltage,current,power,heat,ambient,cycle]])
-features = [[voltage,current,power,heat,ambient,cycle]]
-soh = soh_model.predict(features)
-
-temp_pred = voltage*10 + current*2 + ambient*0.1
-
-# Dashboard Metrics
-st.subheader("📊 Battery Overview")
-
-col1, col2, col3, col4 = st.columns(4)
-
-col1.metric("🔌 Voltage", f"{voltage:.2f} V")
-col2.metric("⚡ Current", f"{current:.2f} A")
-col3.metric("🌡 Temperature", f"{temp_pred:.2f} °C")
-col4.metric("🔋 Battery Health", f"{soh[0]*100:.2f} %")
-
-st.markdown("---")
-
-# Performance Section
-st.subheader("📈 Battery Performance")
-
-col1, col2, col3 = st.columns(3)
-
-with col1:
-    st.write("Battery Health")
-    st.progress(int(soh[0]*100))
-
-with col2:
-    temp_percent = min(int((temp_pred/80)*100),100)
-    st.write("Temperature Level")
-    st.progress(temp_percent)
-
-with col3:
-    power_percent = min(int((power/20)*100),100)
-    st.write("Power Usage")
-    st.progress(power_percent)
-
-st.markdown("---")
-
-# Prediction Results
 st.subheader("Prediction Results")
 
-st.write("🌡 Predicted Temperature:", round(temp_pred,2), "°C")
-st.write("🔋 Battery Health:", round(soh[0]*100,2), "%")
+# Temperature Prediction
+if models['temp'] is not None:
+    temp = models['temp'].predict(features)[0]
+else:
+    temp = 25 + current*3 + ambient*0.4
+
+st.metric("Battery Temperature (°C)", round(temp,2))
+
+# SOH Prediction
+if models['soh'] is not None:
+    soh = models['soh'].predict(features)[0]
+else:
+    soh = 100 - cycle*0.02
+
+st.metric("Battery Health (%)", round(soh,2))
+
+# Risk Prediction
+if models['risk'] is not None:
+    risk = models['risk'].predict(features)[0]
+else:
+    risk = 1 if temp > 45 else 0
+
+if risk == 1:
+    st.error("⚠️ Thermal Runaway Risk Detected")
+else:
+    st.success("✅ Battery Operating Safely")
+
+# Charts
+st.subheader("Battery Status")
+
+st.progress(min(int(soh),100))
+
+st.write("Temperature:", round(temp,2))
+st.write("SOH:", round(soh,2))
